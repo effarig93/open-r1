@@ -1,0 +1,70 @@
+# Sample on-policy distillation configuration for a single node with 8 x H100 (80GB) GPUs
+
+# Model arguments
+model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
+model_revision: main
+torch_dtype: bfloat16
+attn_implementation: flash_attention_2
+trust_remote_code: false
+
+# Teacher model arguments
+teacher_model_name_or_path: Qwen/Qwen2.5-7B-Instruct
+teacher_revision: main
+teacher_device: cuda:7
+
+# Student placement
+student_devices:
+  - cuda:0
+  - cuda:1
+
+# Data training arguments
+dataset_name: open-r1/OpenR1-Math-220k
+dataset_train_split: train
+dataset_test_split: validation
+dataset_prompt_column: problem
+system_prompt: "You are a helpful AI Assistant that provides well-reasoned and detailed responses. You first think about the reasoning process as an internal monologue and then provide the user with the answer. Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"
+
+# On-policy rollout sampling controls
+generation_max_new_tokens: 1024
+generation_temperature: 0.7
+generation_top_p: 0.95
+generation_top_k: 40
+generation_do_sample: true
+kl_coef: 0.1
+use_vllm_generation: true
+vllm_model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
+vllm_tensor_parallel_size: 1
+vllm_gpu_memory_utilization: 0.9
+
+# Trainer configuration
+bf16: true
+do_eval: true
+do_train: true
+eval_strategy: steps
+eval_steps: 50
+gradient_accumulation_steps: 8
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+hub_model_id: Qwen2.5-1.5B-OpenR1-OnPolicyDistill
+hub_strategy: every_save
+learning_rate: 1.5e-05
+log_level: info
+logging_steps: 1
+logging_strategy: steps
+lr_scheduler_type: cosine
+max_grad_norm: 1.0
+max_steps: 1000
+num_train_epochs: 1
+output_dir: data/Qwen2.5-1.5B-OpenR1-OnPolicyDistill
+overwrite_output_dir: true
+per_device_eval_batch_size: 1
+per_device_train_batch_size: 1
+push_to_hub: false
+report_to:
+  - wandb
+save_strategy: steps
+save_steps: 50
+save_total_limit: 2
+seed: 42
+warmup_ratio: 0.03

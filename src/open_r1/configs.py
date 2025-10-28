@@ -206,6 +206,105 @@ class SFTConfig(trl.SFTConfig):
 
 
 @dataclass
+class OnPolicyDistillScriptArguments(ScriptArguments):
+    """Script arguments for the on-policy distillation training script."""
+
+    teacher_model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "Model identifier or path for the frozen teacher used for distillation."},
+    )
+    teacher_revision: Optional[str] = field(
+        default="main",
+        metadata={"help": "Revision to use for loading the teacher model."},
+    )
+    dataset_prompt_column: str = field(
+        default="prompt",
+        metadata={"help": "Column to use as prompts for training."},
+    )
+    generation_max_new_tokens: int = field(
+        default=1024,
+        metadata={"help": "Maximum number of tokens to generate from the student policy."},
+    )
+    generation_temperature: float = field(
+        default=1.0,
+        metadata={"help": "Sampling temperature for on-policy rollouts."},
+    )
+    generation_top_p: float = field(
+        default=1.0,
+        metadata={"help": "Nucleus sampling top-p value for student rollouts."},
+    )
+    generation_top_k: Optional[int] = field(
+        default=None,
+        metadata={"help": "Top-k sampling value for student rollouts."},
+    )
+    generation_do_sample: bool = field(
+        default=True,
+        metadata={"help": "Whether to sample from the student policy during rollouts."},
+    )
+    kl_coef: Optional[float] = field(
+        default=None,
+        metadata={"help": "Optional scaling coefficient applied to the reverse KL loss."},
+    )
+    student_device: Optional[str] = field(
+        default=None,
+        metadata={"help": "Optional torch.device string selecting the GPU for the student model."},
+    )
+    teacher_device: Optional[str] = field(
+        default=None,
+        metadata={"help": "Optional torch.device string selecting the GPU for the teacher model."},
+    )
+    student_devices: Optional[list[str]] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Optional list of torch.device strings specifying multiple GPUs for the student model. "
+                "Mutually exclusive with --student_device."
+            )
+        },
+    )
+    use_vllm_generation: bool = field(
+        default=False,
+        metadata={"help": "Whether to use vLLM for student rollouts instead of Transformers generate."},
+    )
+    vllm_model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "Model identifier or path to initialize the vLLM engine (defaults to the student)."},
+    )
+    vllm_revision: Optional[str] = field(
+        default=None,
+        metadata={"help": "Revision to use when loading the vLLM checkpoint."},
+    )
+    vllm_tensor_parallel_size: int = field(
+        default=1,
+        metadata={"help": "Tensor parallel world size for vLLM generation."},
+    )
+    vllm_gpu_memory_utilization: float = field(
+        default=0.9,
+        metadata={"help": "Fraction of GPU memory vLLM is allowed to use."},
+    )
+    vllm_max_model_len: Optional[int] = field(
+        default=None,
+        metadata={"help": "Optional override for vLLM max_model_len."},
+    )
+    vllm_dtype: Optional[str] = field(
+        default=None,
+        metadata={"help": "Optional dtype override passed to the vLLM engine."},
+    )
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if not self.teacher_model_name_or_path:
+            raise ValueError("`teacher_model_name_or_path` must be provided for on-policy distillation.")
+
+        if self.student_device is not None and self.student_devices:
+            raise ValueError("`student_device` and `student_devices` are mutually exclusive.")
+
+        if self.student_devices is not None and len(self.student_devices) == 0:
+            raise ValueError("`student_devices` must include at least one device when provided.")
+
+
+@dataclass
 class GRPOScriptArguments(ScriptArguments):
     """
     Script arguments for the GRPO training script.

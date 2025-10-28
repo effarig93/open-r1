@@ -5,6 +5,9 @@ export PYTHONPATH = src
 
 check_dirs := src tests
 
+ACCELERATE_CONFIG ?= recipes/accelerate_configs/zero3.yaml
+ON_POLICY_DISTILL_ARGS ?=
+
 
 # dev dependencies
 install:
@@ -50,4 +53,7 @@ evaluate:
 		lighteval vllm $$MODEL_ARGS "lighteval|$(TASK)|0|0" \
 			--use-chat-template \
 			--output-dir data/evals/$(MODEL); \
-	fi
+        fi
+
+train-on-policy-distill:
+        accelerate launch --config_file=$(ACCELERATE_CONFIG) src/open_r1/on_policy_distill.py $(ON_POLICY_DISTILL_ARGS)
