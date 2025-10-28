@@ -10,10 +10,12 @@ trust_remote_code: false
 # Teacher model arguments
 teacher_model_name_or_path: Qwen/Qwen2.5-7B-Instruct
 teacher_revision: main
-teacher_device: cuda:1
+teacher_device: cuda:7
 
 # Student placement
-student_device: cuda:0
+student_devices:
+  - cuda:0
+  - cuda:1
 
 # Data training arguments
 dataset_name: open-r1/OpenR1-Math-220k

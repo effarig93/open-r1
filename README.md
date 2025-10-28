@@ -831,7 +831,7 @@ The command above assumes an 8×H100 node and a compatible teacher checkpoint. T
 
 Additional quality-of-life flags:
 
-- `--student_device` / `--teacher_device` let you pin the student and teacher to specific CUDA devices (for example, `--student_device cuda:0 --teacher_device cuda:1`).
+- `--student_devices` lets you shard the student across multiple GPUs (for example, `--student_devices cuda:0 cuda:1 cuda:2`). Use `--student_device` / `--teacher_device` to pin each model to a single device when desired.
 - `--use_vllm_generation` swaps the rollout sampler to vLLM while keeping the Transformers student for loss computation. Pair it with `--vllm_model_name_or_path` (defaults to the student), `--vllm_tensor_parallel_size`, `--vllm_gpu_memory_utilization`, and related knobs to control the vLLM engine.
 
 For a concrete configuration that can be launched with `TrlParser` configs, check out the sample recipe at [`recipes/Qwen2.5-1.5B-Instruct/on_policy_distill/config_demo.yaml`](./recipes/Qwen2.5-1.5B-Instruct/on_policy_distill/config_demo.yaml).

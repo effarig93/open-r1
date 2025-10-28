@@ -15,7 +15,7 @@
 import logging
 import os
 import sys
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 
 import datasets
 import transformers
@@ -49,6 +49,71 @@ def _build_data_collator(prompt_column: str):
         return {prompt_column: [feature[prompt_column] for feature in features]}
 
     return collate
+
+
+def _normalize_device_spec(device: str) -> str:
+    normalized = str(device).strip()
+    if not normalized:
+        raise ValueError("Empty device string provided in `student_devices`.")
+
+    if normalized.isdigit():
+        return f"cuda:{normalized}"
+
+    if ":" not in normalized and not normalized.startswith("cpu"):
+        return f"cuda:{normalized}"
+
+    return normalized
+
+
+def _place_student_model(
+    model: torch.nn.Module,
+    devices: Sequence[str],
+    logger: logging.Logger,
+) -> torch.nn.Module:
+    normalized_devices = [_normalize_device_spec(device) for device in devices]
+
+    if len(normalized_devices) == 1:
+        student_device = torch.device(normalized_devices[0])
+        logger.info("Placing student model on %s", student_device)
+        model.to(student_device)
+        return model
+
+    try:
+        from accelerate import dispatch_model
+        from accelerate.utils import infer_auto_device_map
+    except ImportError as exc:  # pragma: no cover - accelerate is a training dependency
+        raise ImportError(
+            "Accelerate is required for multi-GPU student placement. "
+            "Please install accelerate or provide a single `--student_device`."
+        ) from exc
+
+    device_set = list(dict.fromkeys(normalized_devices))
+    logger.info("Dispatching student model across devices: %s", ", ".join(device_set))
+
+    try:
+        dtype = next(model.parameters()).dtype
+    except StopIteration:
+        dtype = None
+
+    no_split = getattr(model, "_no_split_modules", None) or getattr(
+        getattr(model, "config", None), "no_split_module_classes", None
+    )
+
+    try:
+        device_map = infer_auto_device_map(
+            model,
+            max_memory={device: "auto" for device in device_set},
+            dtype=dtype,
+            no_split_module_classes=no_split,
+        )
+    except Exception as exc:  # pragma: no cover - relies on accelerate internals
+        raise RuntimeError(
+            "Failed to infer a device map for the requested student devices."
+        ) from exc
+
+    model = dispatch_model(model, device_map=device_map)
+    logger.info("Student device map: %s", device_map)
+    return model
 
 
 def main(script_args, training_args, model_args):
@@ -89,10 +154,10 @@ def main(script_args, training_args, model_args):
         tokenizer.pad_token = tokenizer.eos_token
 
     student_model = get_model(model_args, training_args)
-    if script_args.student_device is not None:
-        student_device = torch.device(script_args.student_device)
-        logger.info("Placing student model on %s", student_device)
-        student_model.to(student_device)
+    if script_args.student_devices:
+        student_model = _place_student_model(student_model, script_args.student_devices, logger)
+    elif script_args.student_device is not None:
+        student_model = _place_student_model(student_model, [script_args.student_device], logger)
 
     teacher_kwargs = {
         "revision": script_args.teacher_revision,

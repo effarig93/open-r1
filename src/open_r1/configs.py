@@ -253,6 +253,15 @@ class OnPolicyDistillScriptArguments(ScriptArguments):
         default=None,
         metadata={"help": "Optional torch.device string selecting the GPU for the teacher model."},
     )
+    student_devices: Optional[list[str]] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Optional list of torch.device strings specifying multiple GPUs for the student model. "
+                "Mutually exclusive with --student_device."
+            )
+        },
+    )
     use_vllm_generation: bool = field(
         default=False,
         metadata={"help": "Whether to use vLLM for student rollouts instead of Transformers generate."},
@@ -287,6 +296,12 @@ class OnPolicyDistillScriptArguments(ScriptArguments):
 
         if not self.teacher_model_name_or_path:
             raise ValueError("`teacher_model_name_or_path` must be provided for on-policy distillation.")
+
+        if self.student_device is not None and self.student_devices:
+            raise ValueError("`student_device` and `student_devices` are mutually exclusive.")
+
+        if self.student_devices is not None and len(self.student_devices) == 0:
+            raise ValueError("`student_devices` must include at least one device when provided.")
 
 
 @dataclass
