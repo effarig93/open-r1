@@ -829,5 +829,10 @@ make train-on-policy-distill ON_POLICY_DISTILL_ARGS='\
 
 The command above assumes an 8×H100 node and a compatible teacher checkpoint. The teacher model is loaded in evaluation mode and never updated, so make sure to provide a valid `--teacher_model_name_or_path` (and optional `--teacher_revision`). The `generation_*` flags control the on-policy sampling temperature, nucleus/top-k filtering, and sequence length, enabling you to trade off exploration for stability during distillation.
 
+Additional quality-of-life flags:
+
+- `--student_device` / `--teacher_device` let you pin the student and teacher to specific CUDA devices (for example, `--student_device cuda:0 --teacher_device cuda:1`).
+- `--use_vllm_generation` swaps the rollout sampler to vLLM while keeping the Transformers student for loss computation. Pair it with `--vllm_model_name_or_path` (defaults to the student), `--vllm_tensor_parallel_size`, `--vllm_gpu_memory_utilization`, and related knobs to control the vLLM engine.
+
 For a concrete configuration that can be launched with `TrlParser` configs, check out the sample recipe at [`recipes/Qwen2.5-1.5B-Instruct/on_policy_distill/config_demo.yaml`](./recipes/Qwen2.5-1.5B-Instruct/on_policy_distill/config_demo.yaml).
 

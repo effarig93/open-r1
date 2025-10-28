@@ -245,6 +245,42 @@ class OnPolicyDistillScriptArguments(ScriptArguments):
         default=None,
         metadata={"help": "Optional scaling coefficient applied to the reverse KL loss."},
     )
+    student_device: Optional[str] = field(
+        default=None,
+        metadata={"help": "Optional torch.device string selecting the GPU for the student model."},
+    )
+    teacher_device: Optional[str] = field(
+        default=None,
+        metadata={"help": "Optional torch.device string selecting the GPU for the teacher model."},
+    )
+    use_vllm_generation: bool = field(
+        default=False,
+        metadata={"help": "Whether to use vLLM for student rollouts instead of Transformers generate."},
+    )
+    vllm_model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "Model identifier or path to initialize the vLLM engine (defaults to the student)."},
+    )
+    vllm_revision: Optional[str] = field(
+        default=None,
+        metadata={"help": "Revision to use when loading the vLLM checkpoint."},
+    )
+    vllm_tensor_parallel_size: int = field(
+        default=1,
+        metadata={"help": "Tensor parallel world size for vLLM generation."},
+    )
+    vllm_gpu_memory_utilization: float = field(
+        default=0.9,
+        metadata={"help": "Fraction of GPU memory vLLM is allowed to use."},
+    )
+    vllm_max_model_len: Optional[int] = field(
+        default=None,
+        metadata={"help": "Optional override for vLLM max_model_len."},
+    )
+    vllm_dtype: Optional[str] = field(
+        default=None,
+        metadata={"help": "Optional dtype override passed to the vLLM engine."},
+    )
 
     def __post_init__(self):
         super().__post_init__()

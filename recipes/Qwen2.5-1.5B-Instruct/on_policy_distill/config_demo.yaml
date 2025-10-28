@@ -10,6 +10,10 @@ trust_remote_code: false
 # Teacher model arguments
 teacher_model_name_or_path: Qwen/Qwen2.5-7B-Instruct
 teacher_revision: main
+teacher_device: cuda:1
+
+# Student placement
+student_device: cuda:0
 
 # Data training arguments
 dataset_name: open-r1/OpenR1-Math-220k
@@ -25,6 +29,10 @@ generation_top_p: 0.95
 generation_top_k: 40
 generation_do_sample: true
 kl_coef: 0.1
+use_vllm_generation: true
+vllm_model_name_or_path: Qwen/Qwen2.5-1.5B-Instruct
+vllm_tensor_parallel_size: 1
+vllm_gpu_memory_utilization: 0.9
 
 # Trainer configuration
 bf16: true

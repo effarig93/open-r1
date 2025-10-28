@@ -14,11 +14,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.nn.utils.rnn import pad_sequence
 from transformers import Trainer
 
 
@@ -32,6 +33,8 @@ class OnPolicyDistillTrainer(Trainer):
         generation_kwargs: Optional[Dict[str, Any]] = None,
         prompt_column: str = "prompt",
         kl_coef: Optional[float] = None,
+        teacher_device: Optional[torch.device | str] = None,
+        vllm_engine: Optional[Any] = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -45,6 +48,10 @@ class OnPolicyDistillTrainer(Trainer):
         self.generation_kwargs = generation_kwargs or {}
         self._debug_last_completion_mask: Optional[torch.Tensor] = None
         self._debug_last_prompt_lengths: Optional[torch.Tensor] = None
+        self.teacher_device = torch.device(teacher_device) if teacher_device is not None else None
+        if self.teacher_device is not None:
+            self.teacher_model.to(self.teacher_device)
+        self.vllm_engine = vllm_engine
 
     def _get_generation_kwargs(self) -> Dict[str, Any]:
         kwargs = dict(self.generation_kwargs)
@@ -60,7 +67,75 @@ class OnPolicyDistillTrainer(Trainer):
             kwargs["do_sample"] = getattr(self.args, "generation_do_sample", True)
         kwargs.setdefault("return_dict_in_generate", False)
         kwargs.setdefault("use_cache", True)
+        if "eos_token_id" not in kwargs and getattr(self.tokenizer, "eos_token_id", None) is not None:
+            kwargs["eos_token_id"] = self.tokenizer.eos_token_id
         return kwargs
+
+    def _prepare_prompt_inputs(self, prompts: Sequence[str], model: nn.Module) -> Dict[str, torch.Tensor]:
+        tokenizer_kwargs = {
+            "padding": True,
+            "truncation": True,
+            "return_tensors": "pt",
+        }
+        if getattr(self.args, "max_seq_length", None) is not None:
+            tokenizer_kwargs["max_length"] = self.args.max_seq_length
+
+        prompt_inputs = self.tokenizer(prompts, **tokenizer_kwargs)
+        return {k: v.to(model.device) for k, v in prompt_inputs.items()}
+
+    def _generate_with_vllm(
+        self,
+        prompts: Sequence[str],
+        prompt_inputs: Dict[str, torch.Tensor],
+        generation_kwargs: Dict[str, Any],
+        device: torch.device,
+    ) -> torch.Tensor:
+        if self.vllm_engine is None:
+            raise RuntimeError("vLLM engine is not configured for this trainer instance.")
+
+        try:
+            from vllm import SamplingParams
+        except ImportError as exc:  # pragma: no cover - defensive, exercised in runtime usage
+            raise RuntimeError("vLLM is required for on-policy generation but is not installed.") from exc
+
+        stop_token_ids = generation_kwargs.get("eos_token_id")
+        if stop_token_ids is not None and not isinstance(stop_token_ids, (list, tuple)):
+            stop_token_ids = [stop_token_ids]
+
+        sampling_params = SamplingParams(
+            temperature=generation_kwargs.get("temperature", 1.0),
+            top_p=generation_kwargs.get("top_p", 1.0),
+            top_k=generation_kwargs.get("top_k"),
+            max_tokens=generation_kwargs.get("max_new_tokens"),
+            n=1,
+            stop_token_ids=stop_token_ids,
+        )
+
+        request_outputs = self.vllm_engine.generate(list(prompts), sampling_params=sampling_params)
+
+        pad_token_id = generation_kwargs["pad_token_id"]
+        prompt_attention = prompt_inputs["attention_mask"]
+        prompt_lengths = prompt_attention.sum(dim=-1)
+        input_ids = prompt_inputs["input_ids"]
+
+        sequences: List[torch.Tensor] = []
+        for idx, output in enumerate(request_outputs):
+            if not getattr(output, "outputs", None):
+                completion_ids = torch.empty(0, dtype=torch.long, device=device)
+            else:
+                token_ids = output.outputs[0].token_ids
+                completion_ids = torch.tensor(token_ids, dtype=torch.long, device=device)
+
+            prompt_len = int(prompt_lengths[idx].item())
+            prompt_tokens = input_ids[idx, :prompt_len].to(device)
+            sequence = torch.cat([prompt_tokens, completion_ids], dim=0)
+            sequences.append(sequence)
+
+        if not sequences:
+            raise ValueError("vLLM generation produced no sequences.")
+
+        generated_sequences = pad_sequence(sequences, batch_first=True, padding_value=pad_token_id)
+        return generated_sequences
 
     def compute_loss(
         self, model: nn.Module, inputs: Dict[str, Any], return_outputs: bool = False
@@ -72,29 +147,27 @@ class OnPolicyDistillTrainer(Trainer):
         if isinstance(prompts, str):
             prompts = [prompts]
 
-        tokenizer_kwargs = {
-            "padding": True,
-            "truncation": True,
-            "return_tensors": "pt",
-        }
-        if getattr(self.args, "max_seq_length", None) is not None:
-            tokenizer_kwargs["max_length"] = self.args.max_seq_length
-
-        prompt_inputs = self.tokenizer(prompts, **tokenizer_kwargs)
-        prompt_inputs = {k: v.to(model.device) for k, v in prompt_inputs.items()}
-
+        prompt_inputs = self._prepare_prompt_inputs(prompts, model)
         generation_kwargs = self._get_generation_kwargs()
         generation_kwargs.setdefault("pad_token_id", self.tokenizer.pad_token_id)
         generation_kwargs.setdefault("eos_token_id", self.tokenizer.eos_token_id)
         if generation_kwargs.get("pad_token_id") is None:
             raise ValueError("Tokenizer must define `pad_token_id` for on-policy distillation.")
 
-        was_training = model.training
-        model.eval()
-        with torch.no_grad():
-            generated_sequences = model.generate(**prompt_inputs, **generation_kwargs)
-        if was_training:
-            model.train()
+        if self.vllm_engine is not None:
+            generated_sequences = self._generate_with_vllm(
+                prompts,
+                prompt_inputs,
+                generation_kwargs,
+                model.device,
+            )
+        else:
+            was_training = model.training
+            model.eval()
+            with torch.no_grad():
+                generated_sequences = model.generate(**prompt_inputs, **generation_kwargs)
+            if was_training:
+                model.train()
 
         attention_mask = (generated_sequences != generation_kwargs["pad_token_id"]).long()
         prompt_lengths = prompt_inputs["attention_mask"].sum(dim=-1)
@@ -106,14 +179,16 @@ class OnPolicyDistillTrainer(Trainer):
         )
         student_logits = student_outputs.logits
 
-        if self.teacher_model.device != model.device:
-            self.teacher_model.to(model.device)
+        teacher_device = self.teacher_device if self.teacher_device is not None else model.device
+        teacher_inputs = {
+            "input_ids": generated_sequences.to(teacher_device),
+            "attention_mask": attention_mask.to(teacher_device),
+            "use_cache": False,
+        }
         with torch.no_grad():
-            teacher_logits = self.teacher_model(
-                input_ids=generated_sequences,
-                attention_mask=attention_mask,
-                use_cache=False,
-            ).logits
+            teacher_logits = self.teacher_model(**teacher_inputs).logits
+        if teacher_device != model.device:
+            teacher_logits = teacher_logits.to(model.device)
 
         student_log_probs = F.log_softmax(student_logits[:, :-1, :], dim=-1)
         teacher_log_probs = F.log_softmax(teacher_logits[:, :-1, :], dim=-1)
