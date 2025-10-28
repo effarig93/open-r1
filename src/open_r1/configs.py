@@ -206,6 +206,91 @@ class SFTConfig(trl.SFTConfig):
 
 
 @dataclass
+class OnPolicyDistillConfig(trl.SFTConfig):
+    """Training configuration for on-policy distillation."""
+
+    benchmarks: list[str] = field(
+        default_factory=lambda: [],
+        metadata={"help": "The benchmarks to run after training."},
+    )
+    callbacks: list[str] = field(
+        default_factory=lambda: [],
+        metadata={"help": "The callbacks to run during training."},
+    )
+    chat_template: Optional[str] = field(default=None, metadata={"help": "The chat template to use."})
+    system_prompt: Optional[str] = field(
+        default=None,
+        metadata={"help": "The optional system prompt to use for benchmarking."},
+    )
+    hub_model_revision: Optional[str] = field(
+        default="main",
+        metadata={"help": "The Hub model branch to push the model to."},
+    )
+    overwrite_hub_revision: bool = field(default=False, metadata={"help": "Whether to overwrite the Hub revision."})
+    push_to_hub_revision: bool = field(default=False, metadata={"help": "Whether to push to a Hub revision/branch."})
+    wandb_entity: Optional[str] = field(
+        default=None,
+        metadata={"help": ("The entity to store runs under.")},
+    )
+    wandb_project: Optional[str] = field(
+        default=None,
+        metadata={"help": ("The project to store runs under.")},
+    )
+    wandb_run_group: Optional[str] = field(
+        default=None,
+        metadata={"help": ("The group to store runs under.")},
+    )
+
+
+@dataclass
+class OnPolicyDistillScriptArguments(ScriptArguments):
+    """Script arguments for the on-policy distillation training script."""
+
+    teacher_model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "Model identifier or path for the frozen teacher used for distillation."},
+    )
+    teacher_revision: Optional[str] = field(
+        default="main",
+        metadata={"help": "Revision to use for loading the teacher model."},
+    )
+    dataset_prompt_column: str = field(
+        default="prompt",
+        metadata={"help": "Column to use as prompts for training."},
+    )
+    generation_max_new_tokens: int = field(
+        default=1024,
+        metadata={"help": "Maximum number of tokens to generate from the student policy."},
+    )
+    generation_temperature: float = field(
+        default=1.0,
+        metadata={"help": "Sampling temperature for on-policy rollouts."},
+    )
+    generation_top_p: float = field(
+        default=1.0,
+        metadata={"help": "Nucleus sampling top-p value for student rollouts."},
+    )
+    generation_top_k: Optional[int] = field(
+        default=None,
+        metadata={"help": "Top-k sampling value for student rollouts."},
+    )
+    generation_do_sample: bool = field(
+        default=True,
+        metadata={"help": "Whether to sample from the student policy during rollouts."},
+    )
+    kl_coef: Optional[float] = field(
+        default=None,
+        metadata={"help": "Optional scaling coefficient applied to the reverse KL loss."},
+    )
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if not self.teacher_model_name_or_path:
+            raise ValueError("`teacher_model_name_or_path` must be provided for on-policy distillation.")
+
+
+@dataclass
 class GRPOScriptArguments(ScriptArguments):
     """
     Script arguments for the GRPO training script.

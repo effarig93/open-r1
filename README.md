@@ -6,9 +6,10 @@
 1. [Overview](#overview)  
 2. [Plan of attack](#plan-of-attack)  
 3. [Installation](#installation)  
-4. [Training models](#training-models)  
-   - [SFT](#sft)  
-   - [GRPO](#grpo)  
+4. [Training models](#training-models)
+   - [SFT](#sft)
+   - [GRPO](#grpo)
+   - [On-policy distillation](#on-policy-distillation)
 5. [Evaluating models](#evaluating-models)  
 6. [Reproducing Deepseek's evaluation results](#reproducing-deepseeks-evaluation-results)  
 7. [Data generation](#data-generation)  
@@ -24,6 +25,7 @@ The goal of this repo is to build the missing pieces of the R1 pipeline such tha
 - `src/open_r1`: contains the scripts to train models as well as generate synthetic data:
     - `grpo.py`: trains a model with GRPO on a given dataset.
     - `sft.py`: performs a simple SFT of a model on a dataset.
+    - `on_policy_distill.py`: distills a student model from a frozen teacher with on-policy rollouts.
     - `generate.py`: generates synthetic data from a model using [Distilabel](https://github.com/argilla-io/distilabel).
 - `Makefile`: contains easy-to-run commands for each step in the R1 pipeline leveraging the scripts above.
 
@@ -130,6 +132,7 @@ Currently, the following tasks are supported:
 
 * Supervised Fine-Tuning `sft`
 * Group Relative Policy Optimization `grpo`
+* On-policy distillation `on_policy_distill`
 
 > [!TIP]
 > If you scale up/down the number of GPUs, we recommend also scaling up the per-device batch size or number of gradient accumulation steps to keep the global batch size constant.
@@ -804,3 +807,25 @@ If you find this project is useful in your own work, please consider citing as f
     year = {2025}
 }
 ```
+### On-policy distillation
+
+On-policy distillation mirrors the R1-Distill setup where a student policy samples rollouts that are then matched to a frozen teacher via reverse KL. To launch training, run:
+
+```shell
+make train-on-policy-distill ON_POLICY_DISTILL_ARGS='\
+    --model_name_or_path open-r1/Qwen2.5-Math-7B-RoPE-300k \
+    --teacher_model_name_or_path deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
+    --dataset_name open-r1/Mixture-of-Thoughts \
+    --dataset_config all \
+    --dataset_prompt_column prompt \
+    --generation_max_new_tokens 1024 \
+    --generation_temperature 0.7 \
+    --max_seq_length 32768 \
+    --per_device_train_batch_size 2 \
+    --gradient_checkpointing \
+    --bf16 \
+    --output_dir data/OpenR1-OnPolicyDistill-7B'
+```
+
+The command above assumes an 8×H100 node and a compatible teacher checkpoint. The teacher model is loaded in evaluation mode and never updated, so make sure to provide a valid `--teacher_model_name_or_path` (and optional `--teacher_revision`). The `generation_*` flags control the on-policy sampling temperature, nucleus/top-k filtering, and sequence length, enabling you to trade off exploration for stability during distillation.
+
