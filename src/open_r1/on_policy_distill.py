@@ -23,7 +23,7 @@ from datasets import DatasetDict
 from transformers import AutoModelForCausalLM, set_seed
 from transformers.trainer_utils import get_last_checkpoint
 
-from open_r1.configs import OnPolicyDistillConfig, OnPolicyDistillScriptArguments
+from open_r1.configs import OnPolicyDistillScriptArguments, SFTConfig
 from open_r1.on_policy_distill_trainer import OnPolicyDistillTrainer
 from open_r1.utils import get_dataset, get_model, get_tokenizer
 from open_r1.utils.callbacks import get_callbacks
@@ -172,6 +172,6 @@ def main(script_args, training_args, model_args):
 
 
 if __name__ == "__main__":
-    parser = TrlParser((OnPolicyDistillScriptArguments, OnPolicyDistillConfig, ModelConfig))
+    parser = TrlParser((OnPolicyDistillScriptArguments, SFTConfig, ModelConfig))
     script_args, training_args, model_args = parser.parse_args_and_config()
     main(script_args, training_args, model_args)

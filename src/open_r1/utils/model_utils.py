@@ -3,11 +3,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenize
 
 from trl import ModelConfig, get_kbit_device_map, get_quantization_config
 
-from ..configs import GRPOConfig, OnPolicyDistillConfig, SFTConfig
+from ..configs import GRPOConfig, SFTConfig
 
 
 def get_tokenizer(
-    model_args: ModelConfig, training_args: SFTConfig | GRPOConfig | OnPolicyDistillConfig
+    model_args: ModelConfig, training_args: SFTConfig | GRPOConfig
 ) -> PreTrainedTokenizer:
     """Get the tokenizer for the model."""
     tokenizer = AutoTokenizer.from_pretrained(
@@ -23,7 +23,7 @@ def get_tokenizer(
 
 
 def get_model(
-    model_args: ModelConfig, training_args: SFTConfig | GRPOConfig | OnPolicyDistillConfig
+    model_args: ModelConfig, training_args: SFTConfig | GRPOConfig
 ) -> AutoModelForCausalLM:
     """Get the model"""
     torch_dtype = (
