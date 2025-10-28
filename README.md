@@ -829,3 +829,5 @@ make train-on-policy-distill ON_POLICY_DISTILL_ARGS='\
 
 The command above assumes an 8×H100 node and a compatible teacher checkpoint. The teacher model is loaded in evaluation mode and never updated, so make sure to provide a valid `--teacher_model_name_or_path` (and optional `--teacher_revision`). The `generation_*` flags control the on-policy sampling temperature, nucleus/top-k filtering, and sequence length, enabling you to trade off exploration for stability during distillation.
 
+For a concrete configuration that can be launched with `TrlParser` configs, check out the sample recipe at [`recipes/Qwen2.5-1.5B-Instruct/on_policy_distill/config_demo.yaml`](./recipes/Qwen2.5-1.5B-Instruct/on_policy_distill/config_demo.yaml).
+
